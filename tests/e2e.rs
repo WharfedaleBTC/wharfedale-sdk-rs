@@ -38,6 +38,20 @@ fn wallet_issuance_and_contract_flow() {
     client.wait_for_tx(&re, WAIT).unwrap();
     assert_eq!(alice.balances().unwrap()[&issued.asset], 1_250);
 
+    // A named issuance: the node verifies the on-chain metadata and serves it.
+    let meta = wharfedale_sdk::AssetMetadata::new("Demo Points", "DPT", 2).unwrap();
+    let named = alice.issue_named(10_000, 0, 1_000, &meta).unwrap();
+    client.wait_for_tx(&named.txid, WAIT).unwrap();
+    let mut record = serde_json::Value::Null;
+    for _ in 0..120 {
+        if let Ok(r) = client.rest(&format!("asset/{}", named.asset)) {
+            record = r;
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    assert_eq!((record["name"].as_str(), record["ticker"].as_str(), record["precision"].as_u64()), (Some("Demo Points"), Some("DPT"), Some(2)));
+
     // Lock to bob's p2pk contract, spend with bob's signature.
     let c = Contract::compile(P2PK, &json!({ "OWNER": format!("0x{}", bob.key().xonly_public_key()) }).to_string()).unwrap();
     let lock = faucet.send(&c.address().to_string(), 100_000, &SendOptions::default()).unwrap();

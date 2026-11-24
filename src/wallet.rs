@@ -15,6 +15,7 @@ use elements::{
 
 use crate::client::{ChainInfo, Client};
 use crate::keys::Key;
+use crate::metadata::AssetMetadata;
 use crate::network::destination;
 use crate::{Error, Result};
 
@@ -241,6 +242,21 @@ impl Wallet {
     /// Issues `amount` of a new asset and `tokens` reissuance tokens (explicit amounts), both
     /// paid confidentially to this key (the token must be confidential to be reissued).
     pub fn build_issue(&self, amount: u64, tokens: u64, fee: u64) -> Result<(Transaction, AssetId, AssetId)> {
+        self.build_issue_with(amount, tokens, fee, None)
+    }
+
+    /// [`build_issue`](Self::build_issue), optionally naming the asset on chain
+    /// ([`AssetMetadata`]: contract hash = SHA-256(metadata), plus an `OP_RETURN "WFA1"` output).
+    pub fn build_issue_with(
+        &self,
+        amount: u64,
+        tokens: u64,
+        fee: u64,
+        metadata: Option<&AssetMetadata>,
+    ) -> Result<(Transaction, AssetId, AssetId)> {
+        if let Some(m) = metadata {
+            m.validate()?;
+        }
         let info = self.client.chain_info()?;
         let me = self.key.script_pubkey();
         let own = Some(self.key.blinding_public_key());
@@ -250,7 +266,8 @@ impl Wallet {
         let mut tx = unsigned_tx(&inputs, vec![]);
         tx.input[0].asset_issuance = AssetIssuance {
             asset_blinding_nonce: AssetBlindingNonce::NEW_ISSUANCE,
-            asset_entropy: AssetEntropy::NEW_ISSUANCE, // contract hash = 0
+            // New issuance: this field is the contract hash (0, or SHA-256 of the metadata).
+            asset_entropy: metadata.map_or(AssetEntropy::NEW_ISSUANCE, |m| AssetEntropy::from_byte_array(m.contract_hash())),
             amount: ConfValue::Explicit(amount),
             inflation_keys: if tokens > 0 { ConfValue::Explicit(tokens) } else { ConfValue::Null },
         };
@@ -260,6 +277,9 @@ impl Wallet {
             tx.output.push(output_to(me.clone(), token, tokens, own));
         }
         tx.output.push(output_to(me, info.fee_asset, total - fee, own));
+        if let Some(m) = metadata {
+            tx.output.push(explicit_output(m.script(), info.fee_asset, 0));
+        }
         tx.output.push(TxOut::new_fee(fee, info.fee_asset));
 
         let mut extra = vec![explicit_secrets(asset, amount)];
@@ -272,6 +292,12 @@ impl Wallet {
 
     pub fn issue(&self, amount: u64, tokens: u64, fee: u64) -> Result<Issued> {
         let (tx, asset, token) = self.build_issue(amount, tokens, fee)?;
+        Ok(Issued { txid: self.client.send_transaction(&tx)?, asset, token })
+    }
+
+    /// Issues an asset named on chain by `metadata`.
+    pub fn issue_named(&self, amount: u64, tokens: u64, fee: u64, metadata: &AssetMetadata) -> Result<Issued> {
+        let (tx, asset, token) = self.build_issue_with(amount, tokens, fee, Some(metadata))?;
         Ok(Issued { txid: self.client.send_transaction(&tx)?, asset, token })
     }
 

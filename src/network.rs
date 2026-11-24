@@ -23,11 +23,16 @@ pub fn fee_asset_for(chain_id: &str) -> AssetId {
 }
 
 /// Parses a payment destination: a `wfc1…`/`wf1…` address, or a hex output script. Returns
-/// the output script and, for a confidential address, its blinding public key.
+/// the output script and, for a confidential address, its blinding public key. An empty script
+/// is refused: on Wharfedale it marks a fee output, so the amount would go to the block's
+/// proposer as fees.
 pub fn destination(to: &str) -> Result<(Script, Option<PublicKey>)> {
     if let Ok(addr) = Address::parse_with_params(to, &ADDRESS_PARAMS) {
         return Ok((addr.script_pubkey(), addr.blinding_pubkey));
     }
     let bytes = hex::decode(to).map_err(|_| Error::Destination(to.to_string()))?;
+    if bytes.is_empty() {
+        return Err(Error::Destination(to.to_string()));
+    }
     Ok((Script::from(bytes), None))
 }

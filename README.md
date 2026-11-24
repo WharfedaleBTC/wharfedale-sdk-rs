@@ -36,8 +36,8 @@ wharfedale-sdk = { path = "../wharfedale-sdk-rs" }
 Use `wharfedale_sdk::elements` instead of adding rust-elements yourself, so the versions
 always match.
 
-A local network for trying things out: `docker compose -f docker/compose.yml up -d --build` in
-the node repository starts four validators with RPC on `http://127.0.0.1:18443`–`18446`.
+A local network for trying things out: `make run` in the node repository starts four validators
+with RPC on `http://127.0.0.1:18443`–`18446` (and a full node on `18447`).
 `docker compose -f docker/compose.yml cp node0:/net/faucet.json .` copies out a funded key.
 
 ## Keys and addresses
@@ -70,15 +70,12 @@ fn main() -> Result<(), wharfedale_sdk::Error> {
 are blocking.
 
 ```rust,no_run
-use std::time::Duration;
 use wharfedale_sdk::Client;
 
 fn main() -> Result<(), wharfedale_sdk::Error> {
     let client = Client::new("http://127.0.0.1:18443");
     let info = client.chain_info()?;
     println!("{} at height {}, fee asset {}", info.chain, info.blocks, info.fee_asset);
-
-    client.wait_for_height(info.blocks + 1, Duration::from_secs(30))?;
 
     // Any Esplora endpoint, as JSON.
     let tip = client.rest_text("blocks/tip/hash")?;
@@ -329,7 +326,9 @@ as consensus requires). A wrong signature or an unmet condition therefore fails 
 ### Time-locked contract
 
 `examples/contracts/timelock.simf` pays `OWNER` only once the spending transaction's lock time
-is at least `AFTER` (a block height). Consensus enforces lock times, so the covenant holds:
+is at least `AFTER` (a block height). Wharfedale makes blocks only when there are transactions,
+so the chain reaches `AFTER` as other transactions confirm, not with time. Consensus enforces
+lock times, so the covenant holds:
 
 ```text
 fn main() {

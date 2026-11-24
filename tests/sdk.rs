@@ -26,6 +26,7 @@ fn key_file_round_trip_and_addresses() {
     assert_eq!(destination(&k.explicit_address().to_string()).unwrap(), (spk.clone(), None));
     assert_eq!(destination(&hex::encode(spk.as_bytes())).unwrap(), (spk, None));
     assert!(destination("not an address").is_err());
+    assert!(destination("").is_err(), "an empty script is a fee output: never a destination");
 }
 
 fn spend_tx(spk: elements::Script, lock_time: u32) -> (Transaction, Vec<TxOut>) {
@@ -77,4 +78,35 @@ fn unsatisfied_contract_fails_before_broadcast() {
     assert!(err.to_string().contains("not satisfied"), "{err}");
     assert!(Contract::compile("fn main() { garbage }", "{}").is_err());
     assert!(Contract::compile(P2PK, "{}").is_err(), "missing argument");
+}
+
+#[test]
+fn recovery_phrases() {
+    // BIP86 reference vector (coin type 0): internal key of m/86'/0'/0'/0/0.
+    let phrase = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+    let k = Key::from_mnemonic_path(phrase, "m/86'/0'/0'/0/0").unwrap();
+    assert_eq!(k.xonly_public_key().to_string(), "cc8a4bc64d897bddc5fbc2f670f7a8ba0b386779106cf1223c6fc5d7cd6fc115");
+    // Whitespace and case don't matter; a bad checksum or word count does.
+    assert_eq!(Key::from_mnemonic(&phrase.to_uppercase().replace(' ', "  ")).unwrap(), Key::from_mnemonic(phrase).unwrap());
+    assert!(Key::from_mnemonic(&phrase.replace("about", "abandon")).is_err());
+    for words in [12, 24] {
+        let p = wharfedale_sdk::keys::generate_mnemonic(words).unwrap();
+        assert_eq!(p.split(' ').count(), words);
+        Key::from_mnemonic(&p).unwrap();
+    }
+    assert!(wharfedale_sdk::keys::generate_mnemonic(13).is_err());
+}
+
+#[test]
+fn asset_metadata_rules() {
+    use wharfedale_sdk::AssetMetadata;
+    let m = AssetMetadata::new("Demo Points", "DPT", 2).unwrap();
+    assert_eq!(String::from_utf8(m.encode()).unwrap(), r#"{"name":"Demo Points","precision":2,"ticker":"DPT"}"#);
+    assert!(m.script().is_op_return());
+    assert!(AssetMetadata::new("", "DPT", 2).is_err());
+    assert!(AssetMetadata::new("x", "dpt", 2).is_err());
+    assert!(AssetMetadata::new("x", "TOOLONGTK", 2).is_err());
+    assert!(AssetMetadata::new("x", "DPT", 9).is_err());
+    assert!(AssetMetadata::new("a\nb", "DPT", 2).is_err());
+    assert!(AssetMetadata::new("é".repeat(64), "DPT", 2).is_err(), "over 128 bytes");
 }

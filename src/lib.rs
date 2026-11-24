@@ -20,6 +20,7 @@ pub mod client;
 pub mod contract;
 mod error;
 pub mod keys;
+pub mod metadata;
 pub mod network;
 pub mod taproot;
 pub mod wallet;
@@ -28,6 +29,7 @@ pub use client::{ChainInfo, Client};
 pub use contract::Contract;
 pub use error::{Error, Result};
 pub use keys::Key;
+pub use metadata::AssetMetadata;
 pub use wallet::{Coin, Issued, SendOptions, Wallet};
 
 /// Re-exported so applications use the exact rust-elements version the SDK does.

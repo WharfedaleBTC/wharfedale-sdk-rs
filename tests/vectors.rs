@@ -162,7 +162,44 @@ fn generate() -> Json {
             })
         })
         .collect();
+    let mnemonics: Vec<Json> = [
+        "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about",
+        "cabin orbit velvet tunnel maple silent harvest copper ladder glance rescue dwarf",
+        "legal winner thank year wave sausage worth useful legal winner thank yellow",
+    ]
+    .iter()
+    .filter_map(|p| Key::from_mnemonic(p).ok().map(|k| (p, k)))
+    .map(|(p, k)| {
+        json!({
+            "phrase": p,
+            "path": wharfedale_sdk::keys::DERIVATION_PATH,
+            "secret": hex::encode(k.secret_bytes()),
+            "xonly_public_key": k.xonly_public_key().to_string(),
+            "address": k.address().to_string(),
+        })
+    })
+    .collect();
+    let metadata: Vec<Json> = [("Demo Points", "DPT", 2u8), ("Harbour Tickets", "HBT", 0), ("Grüße ✓", "GR8", 8)]
+        .iter()
+        .map(|(n, t, p)| {
+            let m = wharfedale_sdk::AssetMetadata::new(*n, *t, *p).unwrap();
+            let prevout = OutPoint::new(Txid::from_byte_array([5; 32]), 1);
+            let contract = elements::ContractHash::from_byte_array(m.contract_hash());
+            let entropy = AssetId::generate_asset_entropy(prevout, contract);
+            json!({
+                "metadata": String::from_utf8(m.encode()).unwrap(),
+                "contract_hash": hex::encode(m.contract_hash()),
+                "script": hex::encode(m.script().as_bytes()),
+                "prevout_txid": prevout.txid.to_string(),
+                "prevout_vout": prevout.vout,
+                "asset": AssetId::from_entropy(entropy).to_string(),
+                "token": AssetId::reissuance_token_from_entropy(entropy, false).to_string(),
+            })
+        })
+        .collect();
     json!({
+        "mnemonics": mnemonics,
+        "metadata": metadata,
         "address_params": { "bech_hrp": ADDRESS_PARAMS.bech_hrp.to_string(), "blech_hrp": ADDRESS_PARAMS.blech_hrp.to_string() },
         "keys": keys,
         "fee_assets": fee_assets,
