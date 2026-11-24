@@ -133,14 +133,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let alice = Wallet::new(client.clone(), Key::load("alice.json".as_ref())?);
     let bob = Key::load("bob.json".as_ref())?;
 
-    // Confidential payment in the fee asset (fee: 1 000 units by default).
+    // Confidential payment in the fee asset (fee: 100 units by default).
     let txid = alice.send(&bob.address().to_string(), 250_000, &SendOptions::default())?;
     let height = client.wait_for_tx(&txid, Duration::from_secs(60))?;
     println!("{txid} confirmed at {height}");
 
     // Explicit payment of an issued asset, with a larger fee.
     let asset: AssetId = "6e8da0e6433b5189d819180caeab100f1f8a88e58feabcbcaa2a357d2d28f0f6".parse()?;
-    let opts = SendOptions { asset: Some(asset), fee: 2_000 };
+    let opts = SendOptions { asset: Some(asset), fee: 500 };
     alice.send(&bob.explicit_address().to_string(), 10, &opts)?;
     Ok(())
 }
@@ -189,8 +189,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Client::new("http://127.0.0.1:18443");
     let issuer = Wallet::new(client.clone(), Key::load("alice.json".as_ref())?);
 
-    // 1 000 000 units and 1 reissuance token (0 tokens = fixed supply). Fee 1 000.
-    let issued = issuer.issue(1_000_000, 1, 1_000)?;
+    // 1 000 000 units and 1 reissuance token (0 tokens = fixed supply). Fee 100.
+    let issued = issuer.issue(1_000_000, 1, 100)?;
     client.wait_for_tx(&issued.txid, Duration::from_secs(60))?;
     println!("asset {}, reissuance token {}", issued.asset, issued.token);
 
@@ -198,7 +198,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     while client.asset(&issued.asset).is_err() {
         std::thread::sleep(Duration::from_millis(250));
     }
-    let txid = issuer.reissue(issued.asset, 500_000, 1_000)?;
+    let txid = issuer.reissue(issued.asset, 500_000, 100)?;
     client.wait_for_tx(&txid, Duration::from_secs(60))?;
     println!("supply now {:?}", client.asset(&issued.asset)?.issued_amount);
 
@@ -225,7 +225,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let key = Key::load("alice.json".as_ref())?;
     let wallet = Wallet::new(client.clone(), key.clone());
     let info = client.chain_info()?;
-    let fee = 1_500;
+    let fee = 150;
 
     // Two payees: a wfc1 address (blinded) and a wf1 address (explicit).
     let (bob_spk, bob_blinder) = destination(&Key::load("bob.json".as_ref())?.address().to_string())?;
@@ -260,7 +260,7 @@ Rules the node enforces (see the node docs, "Validation"):
 
 - Outputs are taproot, fee (empty script) or `OP_RETURN` (explicit only).
 - A transaction spending confidential coins must have at least one blinded output.
-- Fees are paid in the chain's fee asset (`chain_info().fee_asset`). The minimum is 100 units
+- Fees are paid in the chain's fee asset (`chain_info().fee_asset`). The node's default minimum is 10 units
   per 1 000 vbytes.
 
 ## Simplicity contracts
@@ -314,7 +314,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.wait_for_tx(&txid, Duration::from_secs(60))?;
 
     let left: u64 = contract::coins(&client, &p2pk)?.iter().map(|c| c.value()).sum();
-    println!("left in contract: {left}"); // 100 000 − 60 000 − 1 000
+    println!("left in contract: {left}"); // 100 000 − 60 000 − 100
     Ok(())
 }
 ```

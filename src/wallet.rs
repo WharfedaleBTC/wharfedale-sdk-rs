@@ -19,8 +19,10 @@ use crate::metadata::AssetMetadata;
 use crate::network::destination;
 use crate::{Error, Result};
 
-/// Default fee in fee-asset units (the node's minimum relay rate is 100 per 1000 vbytes).
-pub const DEFAULT_FEE: u64 = 1_000;
+/// Default fee in fee-asset units: 100 (100 sats when the fee asset is bitcoin-like). Clears the
+/// node's default minimum relay rate (10 units per 1 000 vbytes) for transactions up to
+/// 10 000 vbytes; a confidential payment is about 1 500–2 500, an issuance about 3 900.
+pub const DEFAULT_FEE: u64 = 100;
 
 /// A spendable output with its opening (asset, value and blinding factors).
 #[derive(Clone, Debug)]

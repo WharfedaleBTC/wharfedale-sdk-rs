@@ -5,6 +5,7 @@ use std::time::Duration;
 
 use serde_json::json;
 use wharfedale_sdk::contract::{self, ContractSpend};
+use wharfedale_sdk::wallet::DEFAULT_FEE;
 use wharfedale_sdk::{Client, Contract, Key, SendOptions, Wallet};
 
 const P2PK: &str = include_str!("../examples/contracts/p2pk.simf");
@@ -23,7 +24,7 @@ fn wallet_issuance_and_contract_flow() {
     client.wait_for_tx(&fund, WAIT).unwrap();
     let pay = alice.send(&bob.key().address().to_string(), 500_000, &SendOptions::default()).unwrap();
     client.wait_for_tx(&pay, WAIT).unwrap();
-    assert_eq!(alice.balances().unwrap()[&info.fee_asset], 2_000_000 - 500_000 - 1_000);
+    assert_eq!(alice.balances().unwrap()[&info.fee_asset], 2_000_000 - 500_000 - DEFAULT_FEE);
     assert_eq!(bob.balances().unwrap()[&info.fee_asset], 500_000);
 
     // Issue and reissue.
@@ -62,5 +63,5 @@ fn wallet_issuance_and_contract_flow() {
     let txid = contract::spend(&client, &c, &spend, &signer).unwrap();
     client.wait_for_tx(&txid, WAIT).unwrap();
     let left: u64 = contract::coins(&client, &c).unwrap().iter().map(|c| c.value()).sum();
-    assert_eq!(left, 100_000 - 50_000 - 1_000);
+    assert_eq!(left, 100_000 - 50_000 - DEFAULT_FEE);
 }
