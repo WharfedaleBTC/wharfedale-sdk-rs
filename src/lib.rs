@@ -32,3 +32,8 @@ pub use wallet::{Coin, Issued, SendOptions, Wallet};
 
 /// Re-exported so applications use the exact rust-elements version the SDK does.
 pub use elements;
+
+/// Compiles every example in README.md (`cargo test --doc`).
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+pub struct ReadmeDoctests;
