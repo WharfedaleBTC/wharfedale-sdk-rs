@@ -170,7 +170,8 @@ pub struct ContractSpend {
     /// Default: the fee asset.
     pub asset: Option<AssetId>,
     pub fee: u64,
-    /// Transaction lock time (block height), for contracts that check it.
+    /// Transaction lock time, for contracts that check it: a block height below 500 000 000, a
+    /// unix time (compared with the block's timestamp) at or above.
     pub lock_time: Option<u32>,
     /// Witness JSON (`"sign:<id>"` placeholders allowed).
     pub witness: Value,
@@ -206,8 +207,8 @@ pub fn build_spend(client: &Client, c: &Contract, spend: &ContractSpend, signer:
     outputs.push(TxOut::new_fee(spend.fee, info.fee_asset));
 
     let mut tx = unsigned_tx(&inputs, outputs);
-    if let Some(h) = spend.lock_time {
-        tx.lock_time = LockTime::from_height(h).map_err(|e| Error::Transaction(format!("lock time: {e}")))?;
+    if let Some(lock) = spend.lock_time {
+        tx.lock_time = LockTime::from_consensus(lock);
         for i in &mut tx.input {
             i.sequence = Sequence::ENABLE_LOCKTIME_NO_RBF;
         }
