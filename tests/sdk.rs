@@ -15,8 +15,14 @@ fn key_file_round_trip_and_addresses() {
     let dir = std::env::temp_dir().join(format!("wf-sdk-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let k = Key::generate();
+    std::fs::write(dir.join("k.json"), b"old").unwrap(); // an existing file is overwritten and tightened
     k.save(&dir.join("k.json")).unwrap();
     assert_eq!(Key::load(&dir.join("k.json")).unwrap(), k);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(dir.join("k.json")).unwrap().permissions().mode() & 0o777, 0o600, "key files are owner-only");
+    }
     assert!(k.address().to_string().starts_with("wfc1p"));
     assert!(k.explicit_address().to_string().starts_with("wf1p"));
     assert!(Key::from_secret([0; 32]).is_err());

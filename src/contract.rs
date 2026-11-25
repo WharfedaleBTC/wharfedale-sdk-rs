@@ -18,7 +18,7 @@ use crate::client::Client;
 use crate::keys::Key;
 use crate::network::{destination, ADDRESS_PARAMS};
 use crate::taproot;
-use crate::wallet::{blind, coins_at, output_to, select, unsigned_tx, Coin, DEFAULT_FEE};
+use crate::wallet::{blind, coins_at, need_more, output_to, select, unsigned_tx, Coin, DEFAULT_FEE};
 use crate::{Error, Result};
 
 /// A compiled SimplicityHL program.
@@ -191,8 +191,8 @@ pub fn build_spend(client: &Client, c: &Contract, spend: &ContractSpend, signer:
     let me = c.script_pubkey();
 
     let mut need = BTreeMap::new();
-    *need.entry(asset).or_insert(0u64) += spend.amount;
-    *need.entry(info.fee_asset).or_insert(0u64) += spend.fee;
+    need_more(&mut need, asset, spend.amount)?;
+    need_more(&mut need, info.fee_asset, spend.fee)?;
     let mut pool = coins(client, c)?;
     let mut inputs = Vec::new();
     let mut outputs = vec![output_to(dest, asset, spend.amount, dest_blinder)];

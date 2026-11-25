@@ -123,10 +123,22 @@ pub fn select(pool: &mut Vec<Coin>, asset: AssetId, amount: u64) -> Result<(Vec<
             return Err(Error::InsufficientFunds { asset, have: total, need: amount });
         };
         let c = pool.remove(i);
-        total += c.value();
+        total = total.checked_add(c.value()).ok_or_else(|| Error::Response("coin values overflow".into()))?;
         taken.push(c);
     }
     Ok((taken, total))
+}
+
+/// `a + b`, or an error naming what overflowed (amounts come from callers and the node).
+pub(crate) fn add(a: u64, b: u64, what: &str) -> Result<u64> {
+    a.checked_add(b).ok_or_else(|| Error::Transaction(format!("{what} overflows")))
+}
+
+/// Adds `amount` of `asset` to what a transaction needs.
+pub(crate) fn need_more(need: &mut BTreeMap<AssetId, u64>, asset: AssetId, amount: u64) -> Result<()> {
+    let n = need.entry(asset).or_insert(0);
+    *n = add(*n, amount, "amount plus fee")?;
+    Ok(())
 }
 
 /// An unsigned version-2 transaction spending `inputs` (final sequences).
@@ -205,8 +217,8 @@ impl Wallet {
         let me = self.key.script_pubkey();
 
         let mut need: BTreeMap<AssetId, u64> = BTreeMap::new();
-        *need.entry(asset).or_insert(0) += amount;
-        *need.entry(info.fee_asset).or_insert(0) += opts.fee;
+        need_more(&mut need, asset, amount)?;
+        need_more(&mut need, info.fee_asset, opts.fee)?;
 
         let mut pool = self.coins()?;
         let mut inputs = Vec::new();
@@ -263,7 +275,7 @@ impl Wallet {
         let me = self.key.script_pubkey();
         let own = Some(self.key.blinding_public_key());
         let mut pool = self.coins()?;
-        let (inputs, total) = select(&mut pool, info.fee_asset, fee + 1)?;
+        let (inputs, total) = select(&mut pool, info.fee_asset, add(fee, 1, "fee")?)?;
 
         let mut tx = unsigned_tx(&inputs, vec![]);
         tx.input[0].asset_issuance = AssetIssuance {
@@ -317,7 +329,7 @@ impl Wallet {
             .position(|c| c.asset() == token && c.confidential)
             .ok_or_else(|| Error::Transaction(format!("no confidential reissuance token for {asset}")))?;
         let token_coin = pool.remove(i);
-        let (fee_coins, total) = select(&mut pool, info.fee_asset, fee + 1)?;
+        let (fee_coins, total) = select(&mut pool, info.fee_asset, add(fee, 1, "fee")?)?;
         let mut inputs = vec![token_coin.clone()];
         inputs.extend(fee_coins);
 
@@ -358,5 +370,30 @@ impl Wallet {
         let prevouts: Vec<TxOut> = inputs.iter().map(|c| c.txout.clone()).collect();
         sign_key_path(&mut tx, &prevouts, &self.key, info.genesis_hash)?;
         Ok(tx)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn coin(asset: AssetId, value: u64, n: u8) -> Coin {
+        let outpoint = OutPoint::new(Txid::from_byte_array([n; 32]), 0);
+        Coin { outpoint, txout: explicit_output(Script::new(), asset, value), secrets: explicit_secrets(asset, value), confidential: false }
+    }
+
+    #[test]
+    fn amounts_never_overflow() {
+        let asset = AssetId::from_byte_array([1; 32]);
+        // Node-reported values that would wrap: an error, not a wrong total.
+        let mut pool = vec![coin(asset, u64::MAX, 1), coin(asset, 1, 2)];
+        assert!(select(&mut pool, asset, u64::MAX).is_ok());
+        let mut pool = vec![coin(asset, u64::MAX - 1, 1), coin(asset, 2, 2)];
+        assert!(select(&mut pool, asset, u64::MAX).is_err());
+        // Caller amounts: amount + fee in the same asset.
+        let mut need = BTreeMap::new();
+        need_more(&mut need, asset, u64::MAX - 10).unwrap();
+        assert!(need_more(&mut need, asset, 100).is_err());
+        assert!(add(u64::MAX, 1, "fee").is_err());
     }
 }

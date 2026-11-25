@@ -87,8 +87,21 @@ impl Key {
         Self::from_secret(secret)
     }
 
+    /// Writes the key file readable by its owner only (mode 0600 on Unix, also when the file
+    /// already exists).
     pub fn save(&self, path: &Path) -> Result<()> {
-        Ok(std::fs::write(path, serde_json::to_vec_pretty(&json!({ "secret": hex::encode(self.secret) }))?)?)
+        use std::io::Write as _;
+        let mut options = std::fs::OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        let mut f = options.open(path)?;
+        // `mode` applies only to a new file: tighten an existing one before writing the secret.
+        #[cfg(unix)]
+        f.set_permissions(std::os::unix::fs::PermissionsExt::from_mode(0o600))?;
+        f.write_all(&serde_json::to_vec_pretty(&json!({ "secret": hex::encode(self.secret) }))?)?;
+        f.sync_all()?;
+        Ok(())
     }
 
     pub fn secret_bytes(&self) -> [u8; 32] {

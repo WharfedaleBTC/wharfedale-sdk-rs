@@ -116,10 +116,14 @@ impl Client {
         self.call("getblockcount", json!([]))?.as_u64().ok_or_else(|| Error::Response("getblockcount".into()))
     }
 
-    /// A confirmed or mempool transaction.
+    /// A confirmed or mempool transaction. Checked to hash to `txid`.
     pub fn transaction(&self, txid: &Txid) -> Result<Transaction> {
         let v = self.call("getrawtransaction", json!([txid.to_string()]))?;
-        decode_tx(v.as_str().ok_or_else(|| Error::Response("getrawtransaction".into()))?)
+        let tx = decode_tx(v.as_str().ok_or_else(|| Error::Response("getrawtransaction".into()))?)?;
+        if tx.txid() != *txid {
+            return Err(Error::Response(format!("getrawtransaction {txid}: the node returned transaction {}", tx.txid())));
+        }
+        Ok(tx)
     }
 
     /// Height of the block containing `txid`; `None` while unconfirmed.
